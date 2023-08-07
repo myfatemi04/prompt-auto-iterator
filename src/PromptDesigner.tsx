@@ -8,17 +8,21 @@ interface PromptResult {
   feedback: string;
 }
 
-const openai = new OpenAIApi(
-  new Configuration({
-    apiKey: process.env.REACT_APP_OPENAI_API_KEY,
-  })
-);
-
 export default function PromptDesigner() {
   const [input, setInput] = useState("");
   const [results, setResults] = useState<PromptResult[]>([
     { prompt: "", result: "", feedback: "" },
   ]);
+  const [key, setKey] = useState<string>();
+  const openai = useMemo(() => {
+    if (key) {
+      return new OpenAIApi(
+        new Configuration({
+          apiKey: key,
+        })
+      );
+    }
+  }, [key]);
 
   const promptImprovementPrompt = useMemo(() => {
     const messages: ChatCompletionRequestMessage[] = [
@@ -51,23 +55,12 @@ export default function PromptDesigner() {
     return messages;
   }, [input, results]);
 
-  const improvePromptAndSampleResult = useCallback(async () => {
-    const improvePromptResponse = await openai.createChatCompletion({
-      messages: promptImprovementPrompt,
-      model: "gpt-4",
-    });
-
-    const predictedPrompt =
-      improvePromptResponse.data.choices[0].message!.content!;
-
-    setResults((results) => [
-      ...results,
-      { prompt: predictedPrompt, result: "", feedback: "" },
-    ]);
-  }, [promptImprovementPrompt]);
-
   const addMachineOutput = useCallback(
     async (index: number) => {
+      if (!openai) {
+        return;
+      }
+
       const { prompt } = results[index];
 
       // Get machine output for this prompt
@@ -87,8 +80,31 @@ export default function PromptDesigner() {
         { prompt: prompt, result: machineOutput, feedback: "" },
       ]);
     },
-    [input, results]
+    [input, openai, results]
   );
+
+  const improvePromptAndSampleResult = useCallback(async () => {
+    if (!openai) {
+      return;
+    }
+
+    const improvePromptResponse = await openai.createChatCompletion({
+      messages: promptImprovementPrompt,
+      model: "gpt-4",
+    });
+
+    const predictedPrompt =
+      improvePromptResponse.data.choices[0].message!.content!;
+
+    const existingResults = results;
+
+    setResults([
+      ...existingResults,
+      { prompt: predictedPrompt, result: "", feedback: "" },
+    ]);
+
+    addMachineOutput(existingResults.length);
+  }, [addMachineOutput, openai, promptImprovementPrompt, results]);
 
   return (
     <div
@@ -99,62 +115,70 @@ export default function PromptDesigner() {
         width: "40rem",
       }}
     >
-      <h1>Prompt Designer</h1>
-      <p>Input to the model:</p>
+      <h1>Prompt Auto Iterator</h1>
+      <h3>Michael Fatemi, Aug 2023</h3>
+      <p>OpenAI key</p>
+      <input
+        type="password"
+        value={key}
+        onChange={(e) => setKey(e.target.value)}
+      />
+      <p>Model input to test with:</p>
       <textarea value={input} onChange={(e) => setInput(e.target.value)} />
-      {results.map((result) => {
-        return (
-          <div style={{ width: "100%" }}>
-            <p>Prompt</p>
-            <textarea
-              style={{ width: "100%" }}
-              rows={8}
-              value={result.prompt}
-              onChange={(e) => {
-                setResults((results) =>
-                  results.map((r) => {
-                    if (r === result) {
-                      return {
-                        ...r,
-                        prompt: e.target.value,
-                      };
-                    }
-                    return r;
-                  })
-                );
-              }}
-            />
-            <br />
+      {results.map((result) => (
+        <div style={{ width: "100%" }}>
+          <p>Prompt</p>
+          <textarea
+            style={{ width: "100%" }}
+            rows={8}
+            value={result.prompt}
+            onChange={(e) => {
+              setResults((results) =>
+                results.map((r) => {
+                  if (r === result) {
+                    return {
+                      ...r,
+                      prompt: e.target.value,
+                    };
+                  }
+                  return r;
+                })
+              );
+            }}
+          />
+          <br />
+          {result.result ? (
+            <>
+              <p>Result</p>
+              <ReactMarkdown children={result.result} />
+              <p>Feedback</p>
+              <textarea
+                style={{ width: "100%" }}
+                rows={5}
+                value={result.feedback}
+                onChange={(e) => {
+                  setResults((results) =>
+                    results.map((r) => {
+                      if (r === result) {
+                        return {
+                          ...r,
+                          feedback: e.target.value,
+                        };
+                      }
+                      return r;
+                    })
+                  );
+                }}
+              />
+              <button onClick={improvePromptAndSampleResult}>Redesign</button>
+            </>
+          ) : (
             <button onClick={() => addMachineOutput(results.indexOf(result))}>
-              Generate machine output
+              Test
             </button>
-            <p>Result</p>
-            <ReactMarkdown children={result.result} />
-            <p>Feedback</p>
-            <textarea
-              style={{ width: "100%" }}
-              rows={5}
-              value={result.feedback}
-              onChange={(e) => {
-                setResults((results) =>
-                  results.map((r) => {
-                    if (r === result) {
-                      return {
-                        ...r,
-                        feedback: e.target.value,
-                      };
-                    }
-                    return r;
-                  })
-                );
-              }}
-            />
-          </div>
-        );
-      })}
-      <div style={{ margin: "1rem" }}>
-        <button onClick={improvePromptAndSampleResult}>Redesign</button>
-      </div>
+          )}
+        </div>
+      ))}
     </div>
   );
 }
