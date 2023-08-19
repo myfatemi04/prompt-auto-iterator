@@ -115,7 +115,11 @@ export default function PromptDesigner() {
         width: "40rem",
       }}
     >
-      <h1>Prompt Auto Iterator</h1>
+      <h1>Automatic Prompt Engineer</h1>
+      <p>
+        Teach an AI to prompt itself. Just provide natural language feedback,
+        and the prompt will adjust accordingly.
+      </p>
       <h3>Michael Fatemi, Aug 2023</h3>
       <p>OpenAI key</p>
       <input
